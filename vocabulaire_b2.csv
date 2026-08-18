@@ -12,3 +12,68 @@ De schulden,Les dettes,Opdraaien voor de schulden van de overledene.,Juridique,0
 Er is geen vuiltje aan de lucht,Tout va bien / aucun problème,Voor de banken leek alsof er geen vuiltje aan de lucht was.,Expressions Idiomatiques,0
 Op volle toeren draaien,Tourner à plein régime,Zijn bank-verzekeraar draait op volle toeren.,Expressions Idiomatiques,0
 In het oog springen,Sauter aux yeux,Vooral de timing springt de senatoren in het oog.,Expressions Idiomatiques,0
+De levensverzekering,L'assurance vie,Hij sluit een levensverzekering af.,Assurance & Actuariat
+De premie,La prime,De maandelijkse premie wordt berekend door de actuaris.,Assurance & Actuariat
+De schadelast,La charge de sinistres,De schadelast is dit jaar flink gestegen.,Assurance & Actuariat
+De polis,La police d'assurance,Lees de polisvoorwaarden goed door.,Assurance & Actuariat
+Het eigen risico,La franchise,Voor deze autoverzekering geldt een hoog eigen risico.,Assurance & Actuariat
+De tarifering,La tarification (pricing),De tarifering van nieuwe producten is mijn hoofdtaak.,Assurance & Actuariat
+De kansberekening,Le calcul des probabilités,De kansberekening vormt de basis van ons model.,Assurance & Actuariat
+De levensverwachting,L'espérance de vie,De levensverwachting blijft stijgen.,Assurance & Actuariat
+De sterftetafel,La table de mortalité,We gebruiken de nieuwste sterftetafels voor de berekening.,Assurance & Actuariat
+De aansprakelijkheid,La responsabilité,De burgerlijke aansprakelijkheid is verplicht.,Assurance & Actuariat
+Het schadegeval,Le sinistre,Na het schadegeval moet u een formulier invullen.,Assurance & Actuariat
+De frequentie,La fréquence,We modelleren de frequentie van ongevallen met een GLM.,Assurance & Actuariat
+De spreiding,La diversification,Een goede spreiding verlaagt het risico van je portefeuille.,Finance & Économie
+De optie,L'option (finance),Het verhandelen van opties vereist veel kennis.,Finance & Économie
+De uitoefenprijs,Le prix d'exercice (strike),De uitoefenprijs van deze call-optie is 50 euro.,Finance & Économie
+De looptijd,La durée / l'échéance,De looptijd van het contract is drie jaar.,Finance & Économie
+De volatiliteit,La volatilité,De volatiliteit op de aandelenmarkt is momenteel hoog.,Finance & Économie
+Het derivaat,Le produit dérivé,Derivaten worden vaak gebruikt om risico's af te dekken.,Finance & Économie
+De wisselkoers,Le taux de change,De wisselkoers tussen de euro en de dollar schommelt.,Finance & Économie
+De hefboom,L'effet de levier,Beleggen met een hefboom kan je winst of verlies vergroten.,Finance & Économie
+Het beursgenoteerde fonds,L'ETF,Hij belegt maandelijks in een wereldwijd beursgenoteerd fonds.,Finance & Économie
+De steekproef,L'échantillon,De steekproef is groot genoeg voor een betrouwbaar resultaat.,Mathématiques & Data
+De lineaire regressie,La régression linéaire,We hebben een meervoudige lineaire regressie uitgevoerd.,Mathématiques & Data
+De variabele,La variable,Deze variabele heeft een sterke invloed op de uitkomst.,Mathématiques & Data
+Het gemiddelde,La moyenne,Het gemiddelde van deze dataset ligt lager dan verwacht.,Mathématiques & Data
+De standaardafwijking,L'écart-type,Een lage standaardafwijking betekent dat de waarden dicht bij elkaar liggen.,Mathématiques & Data
+De voorspelling,La prédiction,De voorspelling van dit model is zeer accuraat.,Mathématiques & Data
+Schatten,Estimer,We moeten de parameters van het model schatten.,Mathématiques & Data
+De correlatie,La corrélation,Er is een sterke positieve correlatie tussen beide variabelen.,Mathématiques & Data
+De hypothecaire lening,Le prêt hypothécaire,We zoeken de beste hypothecaire lening.,Immobilier & Logement
+De rentevoet,Le taux d'intérêt,De rentevoet is de afgelopen maanden gedaald.,Immobilier & Logement
+De notaris,Le notaire,De akte wordt volgende week bij de notaris getekend.,Immobilier & Logement
+Het compromis,Le compromis de vente,Zodra het compromis getekend is kun je niet zomaar terug.,Immobilier & Logement
+De bezichtiging,La visite d'un bien,We hebben vanmiddag een bezichtiging voor een appartement.,Immobilier & Logement
+Het huurcontract,Le contrat de bail,Het huurcontract heeft een looptijd van drie jaar.,Immobilier & Logement
+De huisbaas,Le propriétaire (bailleur),De huisbaas is verantwoordelijk voor grote herstellingen.,Immobilier & Logement
+De borgsom,La garantie locative,Je moet een borgsom van twee maanden huur betalen.,Immobilier & Logement
+De uithouding,L'endurance,Voor een trail van 30km heb je een ijzersterke uithouding nodig.,Sport & Santé
+De krachttraining,La musculation,Krachttraining helpt om blessures te voorkomen.,Sport & Santé
+De spierpijn,Les courbatures,Na de zware training had ik overal spierpijn.,Sport & Santé
+De blessure,La blessure,Door een lichte blessure moest hij even rust nemen.,Sport & Santé
+Het tempo,L'allure / le rythme,Probeer een constant tempo aan te houden tijdens de wedstrijd.,Sport & Santé
+De hoogtemeters,Le dénivelé,Deze wedstrijd telt meer dan duizend hoogtemeters.,Sport & Santé
+Herstellen,Récupérer,Het is belangrijk om goed te herstellen na een zware inspanning.,Sport & Santé
+De moestuin,Le potager,Hij heeft een kleine moestuin op zijn balkon aangelegd.,Jardin & Alimentation
+Oogsten,Récolter,In de zomer kunnen we verse aardbeien oogsten.,Jardin & Alimentation
+De chilipeper,Le piment,Deze chilipeper is echt extreem pittig.,Jardin & Alimentation
+De potgrond,Le terreau,Je hebt voedzame potgrond nodig voor die planten.,Jardin & Alimentation
+De voedselverspilling,Le gaspillage alimentaire,Apps helpen om voedselverspilling tegen te gaan.,Jardin & Alimentation
+De maaltijdbox,La box repas,Een maaltijdbox bespaart veel tijd in de supermarkt.,Jardin & Alimentation
+De overschot,Le reste / l'excédent,We hebben de overschot van gisteren als lunch gegeten.,Jardin & Alimentation
+De houdbaarheidsdatum,La date de péremption,Let goed op de houdbaarheidsdatum van de producten.,Jardin & Alimentation
+De bijles,Le cours particulier / le tutorat,Ik geef bijles wiskunde aan ingenieursstudenten.,Monde Académique
+Het hoorcollege,Le cours magistral,Het hoorcollege statistiek was bijzonder abstract.,Monde Académique
+De scriptie,Le mémoire,Hij legt momenteel de laatste hand aan zijn masterscriptie.,Monde Académique
+Slagen voor,Réussir (un examen),Ik ben gelukkig geslaagd voor al mijn vakken.,Monde Académique
+Buizen voor,Rater (un examen) - Belgicisme,Veel studenten buizen voor dat moeilijke examen.,Monde Académique
+De syllabus,Le syllabus,Alle leerstof staat in de dikke syllabus.,Monde Académique
+Daarentegen,Par contre / en revanche,Hij studeert veel; zij daarentegen doet bijna niets.,Expressions Idiomatiques
+Niettemin,Néanmoins,Het was moeilijk; niettemin is hij erin geslaagd.,Expressions Idiomatiques
+Naarmate,Au fur et à mesure que,Naarmate de deadline nadert stijgt de stress.,Expressions Idiomatiques
+Ten opzichte van,Par rapport à,De winst is gestegen ten opzichte van vorig jaar.,Expressions Idiomatiques
+Met betrekking tot,Concernant / en ce qui concerne,Ik heb een vraag met betrekking tot dit contract.,Expressions Idiomatiques
+De knoop doorhakken,Trancher / prendre une décision,Na lang twijfelen hebben we eindelijk de knoop doorgehakt.,Expressions Idiomatiques
+Voor de boeg hebben,Avoir en perspective / devant soi,We hebben nog een zwaar project voor de boeg.,Expressions Idiomatiques

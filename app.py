@@ -1,8 +1,36 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import os
 import random
 from datetime import date, timedelta
+
+# ============================================================
+# AUDIO (synthèse vocale du navigateur — gratuite, sans clé API)
+# ============================================================
+
+def speak_button(text, lang="nl-BE", label="🔊 Écouter"):
+    """Bouton qui fait lire le texte à voix haute par le navigateur
+    (Web Speech API). Fonctionne hors-ligne, aucune dépendance externe."""
+    text = "" if text is None else str(text)
+    safe_text = text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
+    components.html(
+        f"""
+        <button onclick="
+            if ('speechSynthesis' in window) {{
+                var u = new SpeechSynthesisUtterance(\"{safe_text}\");
+                u.lang = '{lang}';
+                u.rate = 0.85;
+                window.speechSynthesis.cancel();
+                window.speechSynthesis.speak(u);
+            }}
+        " style="
+            background-color:#ffffff;color:#111111;border:1px solid #cccccc;
+            border-radius:8px;padding:6px 14px;cursor:pointer;font-size:14px;
+        ">{label}</button>
+        """,
+        height=42,
+    )
 
 # ============================================================
 # CONFIGURATION & DONNÉES
@@ -278,6 +306,8 @@ elif menu == "🏋️ Exercices":
         top_row = st.columns([4, 1])
         with top_row[0]:
             st.subheader(f"{flag} {word[prompt_col]}")
+            prompt_lang = "nl-BE" if d == "nl_to_fr" else "fr-FR"
+            speak_button(word[prompt_col], lang=prompt_lang, label="🔊 Écouter le mot")
         with top_row[1]:
             if st.button("⏭️ Passer"):
                 new_question(df, direction)
@@ -312,6 +342,10 @@ elif menu == "🏋️ Exercices":
 
             if str(word.get("Contexte", "")).strip():
                 st.info(f"Contexte : {word['Contexte']}")
+
+            if correct_col == "Néerlandais":
+                # Le néerlandais était la réponse à deviner : on propose d'en entendre la prononciation.
+                speak_button(word["Néerlandais"], lang="nl-BE", label="🔊 Écouter la prononciation")
 
             if st.session_state.is_correct:
                 if mode_key == "texte":

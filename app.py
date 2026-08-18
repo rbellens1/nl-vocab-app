@@ -10,8 +10,6 @@ from datetime import date, timedelta
 # ============================================================
 
 def speak_button(text, lang="nl-BE", label="🔊 Écouter"):
-    """Bouton qui fait lire le texte à voix haute par le navigateur
-    (Web Speech API). Fonctionne hors-ligne, aucune dépendance externe."""
     text = "" if text is None else str(text)
     safe_text = text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
     components.html(
@@ -53,11 +51,7 @@ DEFAULTS = {
     "CorrectReviews": 0,
 }
 
-
 def load_data():
-    """Charge le CSV et migre automatiquement les anciennes sauvegardes
-    (celles qui n'avaient qu'une colonne 'Score') vers le nouveau schéma
-    compatible avec la répétition espacée."""
     if os.path.exists(DATA_FILE):
         df = pd.read_csv(DATA_FILE)
     else:
@@ -98,24 +92,19 @@ def load_data():
 
     return df
 
-
 def save_data(df):
     df.to_csv(DATA_FILE, index=False)
-
 
 def next_id(df):
     if df.empty:
         return 1
     return int(df["ID"].max()) + 1
 
-
 # ============================================================
-# RÉPÉTITION ESPACÉE (algorithme SM-2, façon Anki)
+# RÉPÉTITION ESPACÉE (algorithme SM-2)
 # ============================================================
 
 def sm2_update(row, quality):
-    """quality va de 0 (échec total) à 5 (parfait, sans effort).
-    0-2 -> réinitialise le mot. 3-5 -> espace la prochaine révision."""
     ef = float(row["EaseFactor"])
     reps = int(row["Repetitions"])
     interval = int(row["Interval"])
@@ -145,35 +134,38 @@ def sm2_update(row, quality):
         row["CorrectReviews"] = int(row["CorrectReviews"]) + 1
     return row
 
-
 def update_word(df, word_id, quality):
-    idx = df.index[df["ID"] == word_id][0]
+    # FIX: Sécurisation de l'indexation pour éviter l'IndexError si les types (int/str) diffèrent
+    idx_matches = df.index[df["ID"].astype(str) == str(word_id)].tolist()
+    if not idx_matches:
+        return df 
+    
+    idx = idx_matches[0]
     row = df.loc[idx].copy()
     row = sm2_update(row, quality)
     df.loc[idx] = row
     save_data(df)
     return df
 
-
 def pick_word(df):
-    """Priorise les mots dus (en retard en premier). S'il n'y en a aucun,
-    propose un entraînement libre sur un mot au hasard."""
     today_str = str(date.today())
-    due = df[df["NextReview"] <= today_str]
+    # FIX: Forcer le format texte pour éviter les erreurs de comparaison sur des NaNs
+    due = df[df["NextReview"].astype(str) <= today_str]
+    
     if not due.empty:
         due_sorted = due.sort_values("NextReview")
         top = due_sorted.head(max(3, len(due_sorted) // 2))
         return top.sample(1).iloc[0], True
     return df.sample(1).iloc[0], False
 
-
 def generate_choices(df, correct_row, direction):
-    """Génère les propositions du QCM, en piochant si possible des
-    distracteurs de la même catégorie (plus pertinent pédagogiquement)."""
     target_col = "Néerlandais" if direction == "fr_to_nl" else "Français"
     correct_answer = str(correct_row[target_col])
-
-    same_cat = df[(df["Catégorie"] == correct_row["Catégorie"]) & (df[target_col].astype(str) != correct_answer)]
+    
+    # FIX: Gestion sécurisée des catégories manquantes (NaN)
+    cat_actuelle = str(correct_row.get("Catégorie", ""))
+    same_cat = df[(df["Catégorie"].fillna("").astype(str) == cat_actuelle) & (df[target_col].astype(str) != correct_answer)]
+    
     pool = same_cat[target_col].dropna().astype(str).unique().tolist()
     random.shuffle(pool)
     distractors = pool[:3]
@@ -188,22 +180,27 @@ def generate_choices(df, correct_row, direction):
     random.shuffle(choices)
     return choices, correct_answer
 
-
 def new_question(df, direction_pref):
     row, was_due = pick_word(df)
     st.session_state.current_word = row
     st.session_state.was_due = was_due
+    
     if direction_pref == "Aléatoire":
         st.session_state.current_direction = random.choice(["fr_to_nl", "nl_to_fr"])
     elif direction_pref == "FR → NL":
         st.session_state.current_direction = "fr_to_nl"
     else:
         st.session_state.current_direction = "nl_to_fr"
+        
     st.session_state.answered = False
     st.session_state.is_correct = None
     st.session_state.qcm_choices = None
     st.session_state.qcm_correct = None
 
+# FIX: Fonction callback pour réinitialiser la question si on change de mode en cours de route
+def reset_question_state():
+    if "current_word" in st.session_state:
+        del st.session_state["current_word"]
 
 # ============================================================
 # INTERFACE
@@ -215,7 +212,7 @@ st.set_page_config(page_title="Mon Vocabulaire Néerlandais", page_icon="🇳�
 
 st.sidebar.title("Navigation")
 if not df.empty:
-    due_count = len(df[df["NextReview"] <= str(date.today())])
+    due_count = len(df[df["NextReview"].astype(str) <= str(date.today())])
     st.sidebar.caption(f"📅 {due_count} mot(s) à réviser aujourd'hui")
 menu = st.sidebar.radio("Aller à", ["📚 Bibliothèque", "➕ Ajouter un mot", "🏋️ Exercices", "📊 Statistiques"])
 
@@ -280,13 +277,17 @@ elif menu == "🏋️ Exercices":
     else:
         col_a, col_b = st.columns(2)
         with col_a:
-            mode = st.radio("Mode", ["✍️ Texte libre", "🔘 QCM"], horizontal=True, key="ex_mode")
+            # FIX: Ajout du callback on_change
+            mode = st.radio("Mode", ["✍️ Texte libre", "🔘 QCM"], horizontal=True, key="ex_mode", on_change=reset_question_state)
         with col_b:
-            direction = st.radio("Sens", ["FR → NL", "NL → FR", "Aléatoire"], horizontal=True, key="ex_direction")
+            # FIX: Ajout du callback on_change
+            direction = st.radio("Sens", ["FR → NL", "NL → FR", "Aléatoire"], horizontal=True, key="ex_direction", on_change=reset_question_state)
 
         mode_key = "qcm" if "QCM" in mode else "texte"
-        if mode_key == "qcm" and len(df) < 4:
-            st.info("Il te faut au moins 4 mots dans ta bibliothèque pour un QCM pertinent. Mode texte libre utilisé à la place.")
+        
+        # Vérification du nombre de mots pour le QCM
+        if mode_key == "qcm" and len(df["Néerlandais"].unique()) < 4:
+            st.info("Il te faut au moins 4 mots uniques dans ta bibliothèque pour un QCM pertinent. Mode texte libre utilisé à la place.")
             mode_key = "texte"
 
         if "current_word" not in st.session_state:
@@ -340,11 +341,10 @@ elif menu == "🏋️ Exercices":
             else:
                 st.error(f"Faux. La bonne réponse était : **{word[correct_col]}**")
 
-            if str(word.get("Contexte", "")).strip():
+            if str(word.get("Contexte", "")).strip() and str(word.get("Contexte", "")) != "nan":
                 st.info(f"Contexte : {word['Contexte']}")
 
             if correct_col == "Néerlandais":
-                # Le néerlandais était la réponse à deviner : on propose d'en entendre la prononciation.
                 speak_button(word["Néerlandais"], lang="nl-BE", label="🔊 Écouter la prononciation")
 
             if st.session_state.is_correct:
@@ -364,7 +364,6 @@ elif menu == "🏋️ Exercices":
                         new_question(updated_df, direction)
                         st.rerun()
                 else:
-                    # En QCM (reconnaissance, pas rappel actif) on note directement
                     if st.button("Mot suivant ➔"):
                         updated_df = update_word(df, word["ID"], 4)
                         new_question(updated_df, direction)
@@ -384,7 +383,7 @@ elif menu == "📊 Statistiques":
     else:
         today_str = str(date.today())
         total = len(df)
-        due_today = len(df[df["NextReview"] <= today_str])
+        due_today = len(df[df["NextReview"].astype(str) <= today_str])
         mastered = len(df[df["Repetitions"] >= 5])
         total_reviews = int(df["TotalReviews"].sum())
         correct_reviews = int(df["CorrectReviews"].sum())
@@ -403,7 +402,7 @@ elif menu == "📊 Statistiques":
         upcoming = []
         for i in range(7):
             d_ = date.today() + timedelta(days=i)
-            count = len(df[df["NextReview"] == str(d_)])
+            count = len(df[df["NextReview"].astype(str) == str(d_)])
             upcoming.append({"Date": d_.strftime("%d/%m"), "Mots": count})
         upcoming_df = pd.DataFrame(upcoming).set_index("Date")
         st.bar_chart(upcoming_df)

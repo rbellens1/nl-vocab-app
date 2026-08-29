@@ -5,6 +5,8 @@ import random
 from io import BytesIO
 from datetime import date, timedelta
 from gtts import gTTS
+import plotly.express as px
+import plotly.graph_objects as go
 
 # ============================================================
 # INITIALISATION DE L'ÉTAT (SESSION STATE)

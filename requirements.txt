@@ -1,3 +1,5 @@
 streamlit
 pandas
 gtts
+plotly.express
+plotly.graph_objects

@@ -457,42 +457,116 @@ elif menu == "🏋️ Exercices":
 
 # --- PAGE 4 : STATISTIQUES ---
 elif menu == "📊 Statistiques":
-    st.title("Statistiques d'apprentissage")
+    st.title("📊 Tableau de Bord d'Apprentissage")
 
     if df.empty:
         st.info("Pas encore de statistiques, ajoute des mots pour commencer !")
     else:
+        # --- CALCUL DES DONNÉES ---
         today_str = str(date.today())
         total = len(df)
         due_today = len(df[df["NextReview"] <= today_str])
-        mastered = len(df[df["Repetitions"] >= 5])
+        
+        nouveaux = len(df[df["TotalReviews"] == 0])
+        maitrises = len(df[df["Repetitions"] >= 5])
+        en_cours = total - nouveaux - maitrises
+        
         total_reviews = int(df["TotalReviews"].sum())
         correct_reviews = int(df["CorrectReviews"].sum())
         success_rate = (correct_reviews / total_reviews * 100) if total_reviews > 0 else 0
 
+        # --- LIGNE 1 : METRICS GLOBAUX ---
+        st.write("### Vue d'ensemble")
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Mots au total", total)
-        c2.metric("À réviser aujourd'hui", due_today)
-        c3.metric("Mots maîtrisés", mastered)
-        c4.metric("Taux de réussite", f"{success_rate:.0f} %")
+        c1.metric("📚 Mots dans la base", total)
+        c2.metric("🔥 À réviser aujourd'hui", due_today)
+        c3.metric("🧠 Mots maîtrisés", maitrises)
+        c4.metric("🎯 Taux de précision", f"{success_rate:.0f} %")
 
-        st.subheader("Répartition par catégorie")
-        st.bar_chart(df["Catégorie"].value_counts())
+        st.divider()
 
-        st.subheader("Révisions prévues (7 prochains jours)")
+        # --- LIGNE 2 : GRAPHIQUES CIRCULAIRES ---
+        col_donut, col_gauge = st.columns(2)
+
+        with col_donut:
+            st.write("#### Progression du vocabulaire")
+            # Graphique Donut pour la répartition des mots
+            labels = ['Nouveaux', "En cours d'apprentissage", 'Maîtrisés']
+            values = [nouveaux, en_cours, maitrises]
+            colors = ['#E2E8F0', '#F97316', '#10B981'] # Gris, Orange (Néerlandais!), Vert
+
+            fig_donut = go.Figure(data=[go.Pie(
+                labels=labels, 
+                values=values, 
+                hole=.6, 
+                marker_colors=colors,
+                textinfo='percent',
+                hoverinfo='label+value'
+            )])
+            fig_donut.update_layout(margin=dict(t=20, b=20, l=20, r=20), showlegend=True)
+            
+            st.plotly_chart(fig_donut, use_container_width=True)
+
+        with col_gauge:
+            st.write("#### Taux de réussite global")
+            # Jauge pour le taux de succès
+            fig_gauge = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=success_rate,
+                number={'suffix': "%", 'font': {'size': 50}},
+                gauge={
+                    'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "darkblue"},
+                    'bar': {'color': "#3B82F6"}, # Bleu
+                    'bgcolor': "white",
+                    'steps': [
+                        {'range': [0, 50], 'color': "#FEE2E2"},   # Rouge clair
+                        {'range': [50, 80], 'color': "#FEF3C7"},  # Jaune clair
+                        {'range': [80, 100], 'color': "#D1FAE5"}  # Vert clair
+                    ],
+                }
+            ))
+            fig_gauge.update_layout(margin=dict(t=40, b=20, l=20, r=20))
+            
+            st.plotly_chart(fig_gauge, use_container_width=True)
+
+        st.divider()
+
+        # --- LIGNE 3 : CHARGE DE TRAVAIL FUTURE (BAR CHART MODERNE) ---
+        st.write("#### 📅 Prévisions des 7 prochains jours")
         upcoming = []
         for i in range(7):
             d_ = date.today() + timedelta(days=i)
             count = len(df[df["NextReview"] == str(d_)])
+            # Formater la date en jj/mm
             upcoming.append({"Date": d_.strftime("%d/%m"), "Mots": count})
-        upcoming_df = pd.DataFrame(upcoming).set_index("Date")
-        st.bar_chart(upcoming_df)
+        
+        df_upcoming = pd.DataFrame(upcoming)
+        
+        # Joli graphique en barre Plotly
+        fig_bar = px.bar(
+            df_upcoming, 
+            x='Date', 
+            y='Mots', 
+            text_auto=True,
+            color='Mots',
+            color_continuous_scale='Blues' # Dégradé de bleu selon l'intensité
+        )
+        fig_bar.update_layout(
+            xaxis_title="", 
+            yaxis_title="", 
+            margin=dict(t=10, b=10, l=10, r=10),
+            coloraxis_showscale=False # Cache la légende de couleur inutile
+        )
+        fig_bar.update_traces(textfont_size=14, textangle=0, textposition="outside", cliponaxis=False)
+        
+        st.plotly_chart(fig_bar, use_container_width=True)
 
+        # --- LIGNE 4 : LES MOTS DIFFICILES (DANS UN MENU DÉROULANT POUR NE PAS POLLUER) ---
         difficult = df[(df["TotalReviews"] >= 2) & (df["EaseFactor"] < 2.0)]
         if not difficult.empty:
-            st.subheader("⚠️ Mots à travailler en priorité")
-            st.dataframe(
-                difficult[["Néerlandais", "Français", "Catégorie", "EaseFactor", "TotalReviews"]],
-                use_container_width=True,
-                hide_index=True,
-            )
+            with st.expander(f"⚠️ Afficher les mots à retravailler en priorité ({len(difficult)} mots)"):
+                st.dataframe(
+                    difficult[["Néerlandais", "Français", "Catégorie", "EaseFactor", "TotalReviews"]].sort_values("EaseFactor"),
+                    use_container_width=True,
+                    hide_index=True,
+                )

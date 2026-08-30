@@ -7,6 +7,7 @@ from datetime import date, timedelta
 from gtts import gTTS
 import plotly.express as px
 import plotly.graph_objects as go
+import re
 
 # ============================================================
 # INITIALISATION DE L'ÉTAT (SESSION STATE)
@@ -204,6 +205,28 @@ def new_question(df, direction_pref):
     st.session_state.qcm_choices = None
     st.session_state.qcm_correct = None
 
+def get_category_color(categorie):
+    cat = str(categorie)
+    # Cherche la première séquence de chiffres dans le nom de la catégorie
+    match = re.search(r'\d+', cat)
+    
+    if match:
+        num = int(match.group()) # Convertit le texte trouvé en nombre entier
+        
+        if num <= 1000:
+            return "#10B981"  # Vert (1 à 1000)
+        elif num <= 2000:
+            return "#3B82F6"  # Bleu (1001 à 2000)
+        elif num <= 3000:
+            return "#F97316"  # Orange (2001 à 3000)
+        elif num <= 4000:
+            return "#EF4444"  # Rouge (3001 à 4000)
+        else:
+            return "#8B5CF6"  # Violet (4001 et +)
+    else:
+        # Si aucun chiffre n'est trouvé (ex: catégories manuelles "Finance", "Juridique")
+        return "inherit"
+
 # ============================================================
 # INTERFACE
 # ============================================================
@@ -374,7 +397,13 @@ elif menu == "🏋️ Exercices":
             # TOP BAR AVEC LES BOUTONS
             top_row = st.columns([5, 2, 2])
             with top_row[0]:
-                st.subheader(f"{flag} {word[prompt_col]}")
+                # Nouvel affichage avec code couleur :
+                word_color = get_category_color(word["Catégorie"])
+                st.markdown(
+                            f"<h3 style='color: {word_color}; margin-bottom: 0px;'>{flag} {word[prompt_col]}</h3>", 
+                 unsafe_allow_html=True
+                            )
+                st.caption(f"Catégorie : {word['Catégorie']}") # Optionnel : affiche la tranche sous le mot
                 prompt_lang = "nl" if d == "nl_to_fr" else "fr"
                 speak_button(word[prompt_col], lang=prompt_lang, label="🔊 Écouter", key=f"speak_prompt_{word['ID']}")
             with top_row[1]:

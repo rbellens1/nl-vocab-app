@@ -8,6 +8,7 @@ from gtts import gTTS
 import plotly.express as px
 import plotly.graph_objects as go
 import re
+import numpy as np
 
 # ============================================================
 # INITIALISATION DE L'ÉTAT (SESSION STATE)
@@ -162,14 +163,55 @@ def mark_as_known(df, word_id):
     save_data(df)
     return df
 
-def pick_word(df):
+def pick_word_intelligent(df):
     today_str = str(date.today())
-    due = df[df["NextReview"] <= today_str]
-    if not due.empty:
-        due_sorted = due.sort_values("NextReview")
-        top = due_sorted.head(max(3, len(due_sorted) // 2))
-        return top.sample(1).iloc[0], True
-    return df.sample(1).iloc[0], False
+    
+    # 1. Sélectionner les mots dus (ou tous les mots si rien n'est dû)
+    due = df[df["NextReview"] <= today_str].copy()
+    is_due = True
+    
+    if due.empty:
+        due = df.copy()
+        is_due = False
+
+    # ============================================================
+    # CALCUL DU SCORE DE PRIORITÉ (Plus le score est haut, plus le mot est prioritaire)
+    # ============================================================
+    
+    # A. FACTEUR DE RARETÉ (Favorise les mots moins fréquents)
+    # On extrait le chiffre de la catégorie (ex: "Top 3001-4000" -> 3001). 
+    # S'il n'y a pas de chiffre, on donne une valeur par défaut de 1000.
+    nums = due["Catégorie"].astype(str).str.extract(r'(\d+)').astype(float).fillna(1000)
+    # Un mot du top 4000 aura un multiplicateur de 3.0, un mot du top 1000 aura 1.5.
+    rarity_weight = 1.0 + (nums[0] / 2000.0) 
+    
+    # B. FACTEUR DE DIFFICULTÉ (Basé sur l'EaseFactor de l'algo SM-2)
+    # Plus l'EaseFactor est bas (proche de 1.3), plus le mot est considéré comme dur.
+    ef = due["EaseFactor"].astype(float).clip(lower=1.3)
+    difficulty_weight = 2.5 / ef 
+    
+    # C. TAUX D'ÉCHEC (Détection des "Leeches" - les mots qui bloquent souvent)
+    tot = due["TotalReviews"].astype(float)
+    corr = due["CorrectReviews"].astype(float)
+    # Si le mot a déjà été révisé, on booste son score en fonction de son taux d'erreur.
+    # S'il est nouveau (tot == 0), on lui donne un léger boost initial (1.1).
+    fail_rate = np.where(tot > 0, 1.0 + (1.0 - (corr / np.maximum(tot, 1))), 1.1)
+    
+    # --- Score final ---
+    due["PriorityScore"] = rarity_weight * difficulty_weight * fail_rate
+    
+    # ============================================================
+    # ÉCHANTILLONNAGE PONDÉRÉ
+    # ============================================================
+    # Pour éviter de tourner en boucle sur les 2 mêmes mots difficiles, 
+    # on isole le top 15 des mots les plus prioritaires, puis on en tire un au hasard.
+    top_candidates = due.nlargest(min(15, len(due)), "PriorityScore")
+    
+    # On utilise les scores de priorité comme probabilités de tirage (pondération)
+    weights = top_candidates["PriorityScore"] / top_candidates["PriorityScore"].sum()
+    chosen_word = top_candidates.sample(1, weights=weights).iloc[0]
+    
+    return chosen_word, is_due
 
 def generate_choices(df, correct_row, direction):
     target_col = "Néerlandais" if direction == "fr_to_nl" else "Français"
@@ -191,7 +233,7 @@ def generate_choices(df, correct_row, direction):
     return choices, correct_answer
 
 def new_question(df, direction_pref):
-    row, was_due = pick_word(df)
+    row, was_due = pick_word_intelligent(df)
     st.session_state.current_word = row
     st.session_state.was_due = was_due
     if direction_pref == "Aléatoire":

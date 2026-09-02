@@ -8,7 +8,6 @@ from gtts import gTTS
 import plotly.express as px
 import plotly.graph_objects as go
 import re
-import numpy as np
 
 # ============================================================
 # INITIALISATION DE L'ÉTAT (SESSION STATE)
@@ -163,55 +162,102 @@ def mark_as_known(df, word_id):
     save_data(df)
     return df
 
-def pick_word_intelligent(df):
-    today_str = str(date.today())
-    
-    # 1. Sélectionner les mots dus (ou tous les mots si rien n'est dû)
-    due = df[df["NextReview"] <= today_str].copy()
-    is_due = True
-    
-    if due.empty:
-        due = df.copy()
-        is_due = False
+def get_frequency_rank(categorie):
+    """
+    Extrait le rang de fréquence approximatif à partir du nom de catégorie
+    (ex : 'Top 2001-3000 - Base' -> 2001). Renvoie None si aucun chiffre n'est
+    trouvé (catégories ajoutées manuellement comme 'Finance & Économie').
+    """
+    match = re.search(r'\d+', str(categorie))
+    return int(match.group()) if match else None
 
-    # ============================================================
-    # CALCUL DU SCORE DE PRIORITÉ (Plus le score est haut, plus le mot est prioritaire)
-    # ============================================================
-    
-    # A. FACTEUR DE RARETÉ (Favorise les mots moins fréquents)
-    # On extrait le chiffre de la catégorie (ex: "Top 3001-4000" -> 3001). 
-    # S'il n'y a pas de chiffre, on donne une valeur par défaut de 1000.
-    nums = due["Catégorie"].astype(str).str.extract(r'(\d+)').astype(float).fillna(1000)
-    # Un mot du top 4000 aura un multiplicateur de 3.0, un mot du top 1000 aura 1.5.
-    rarity_weight = 1.0 + (nums[0] / 2000.0) 
-    
-    # B. FACTEUR DE DIFFICULTÉ (Basé sur l'EaseFactor de l'algo SM-2)
-    # Plus l'EaseFactor est bas (proche de 1.3), plus le mot est considéré comme dur.
-    ef = due["EaseFactor"].astype(float).clip(lower=1.3)
-    difficulty_weight = 2.5 / ef 
-    
-    # C. TAUX D'ÉCHEC (Détection des "Leeches" - les mots qui bloquent souvent)
-    tot = due["TotalReviews"].astype(float)
-    corr = due["CorrectReviews"].astype(float)
-    # Si le mot a déjà été révisé, on booste son score en fonction de son taux d'erreur.
-    # S'il est nouveau (tot == 0), on lui donne un léger boost initial (1.1).
-    fail_rate = np.where(tot > 0, 1.0 + (1.0 - (corr / np.maximum(tot, 1))), 1.1)
-    
-    # --- Score final ---
-    due["PriorityScore"] = rarity_weight * difficulty_weight * fail_rate
-    
-    # ============================================================
-    # ÉCHANTILLONNAGE PONDÉRÉ
-    # ============================================================
-    # Pour éviter de tourner en boucle sur les 2 mêmes mots difficiles, 
-    # on isole le top 15 des mots les plus prioritaires, puis on en tire un au hasard.
-    top_candidates = due.nlargest(min(15, len(due)), "PriorityScore")
-    
-    # On utilise les scores de priorité comme probabilités de tirage (pondération)
-    weights = top_candidates["PriorityScore"] / top_candidates["PriorityScore"].sum()
-    chosen_word = top_candidates.sample(1, weights=weights).iloc[0]
-    
-    return chosen_word, is_due
+
+def get_frequency_band_label(rank):
+    """Regroupe un rang de fréquence en tranche lisible, pour les statistiques."""
+    if rank is None:
+        return "Sans fréquence (ajout manuel)"
+    if rank <= 1000:
+        return "Top 1-1000 (très fréquent)"
+    elif rank <= 2000:
+        return "Top 1001-2000"
+    elif rank <= 3000:
+        return "Top 2001-3000"
+    elif rank <= 4000:
+        return "Top 3001-4000"
+    else:
+        return "Top 4001-5000+ (rare)"
+
+
+def compute_priority_weight(row, today, rarity_bias=1.0, difficulty_bias=1.0):
+    """
+    Calcule un poids de sélection pour un mot : plus il est élevé, plus le mot
+    a de chances d'être tiré au sort pendant l'exercice. Combine trois signaux :
+
+    1. L'ancienneté du retard (SM-2) : un mot en retard depuis longtemps remonte plus vite.
+    2. La rareté du mot (rarity_bias) : favorise les mots à fréquence plus faible
+       (frequentieklasse élevée dans "Catégorie"), pour t'entraîner sur du vocabulaire
+       moins courant plutôt que de revoir sans cesse les mots les plus fréquents.
+    3. La difficulté perçue (difficulty_bias) : favorise les mots que tu maîtrises mal
+       (faible taux de réussite, EaseFactor bas), pour cibler tes lacunes.
+    """
+    weight = 1.0
+
+    # 1. Ancienneté de la révision
+    try:
+        next_review = date.fromisoformat(str(row["NextReview"]))
+        overdue_days = max(0, (today - next_review).days)
+    except (ValueError, TypeError):
+        overdue_days = 0
+    weight *= 1 + min(overdue_days, 30) * 0.05  # jusqu'à +150 % si très en retard
+
+    # 2. Rareté du mot (frequentieklasse) : plus le rang est élevé, plus le mot est rare
+    if rarity_bias > 0:
+        rank = get_frequency_rank(row.get("Catégorie", ""))
+        if rank is not None:
+            normalized_rank = min(rank, 5000) / 5000  # 0 (très fréquent) → 1 (rare)
+            weight *= 1 + rarity_bias * normalized_rank * 3
+
+    # 3. Difficulté perçue : taux de réussite bas et/ou EaseFactor bas = priorité plus haute
+    if difficulty_bias > 0:
+        total = int(row.get("TotalReviews", 0))
+        correct = int(row.get("CorrectReviews", 0))
+        ease = float(row.get("EaseFactor", 2.5))
+        if total > 0:
+            success_rate = correct / total
+            weight *= 1 + difficulty_bias * (1 - success_rate) * 2
+            if ease < 2.0:
+                weight *= 1 + difficulty_bias * (2.0 - ease)
+
+    return weight
+
+
+def pick_word(df, rarity_bias=1.0, difficulty_bias=1.0, exclude_id=None):
+    """
+    Sélection intelligente et pondérée du prochain mot à réviser.
+
+    Parmi les mots dus (ou toute la base s'il n'y en a pas), chaque mot reçoit un
+    poids (voir compute_priority_weight) puis un tirage aléatoire pondéré est
+    effectué : les mots en retard, rares et/ou mal maîtrisés ont statistiquement
+    plus de chances d'apparaître, sans jamais totalement exclure les autres.
+    """
+    today = date.today()
+    today_str = str(today)
+    due = df[df["NextReview"] <= today_str]
+    pool = due if not due.empty else df
+    was_due = not due.empty
+
+    # Évite de reposer immédiatement le même mot deux fois de suite
+    if exclude_id is not None and len(pool) > 1:
+        filtered = pool[pool["ID"] != exclude_id]
+        if not filtered.empty:
+            pool = filtered
+
+    weights = pool.apply(lambda r: compute_priority_weight(r, today, rarity_bias, difficulty_bias), axis=1)
+    if weights.sum() <= 0:
+        chosen = pool.sample(1).iloc[0]
+    else:
+        chosen = pool.sample(1, weights=weights).iloc[0]
+    return chosen, was_due
 
 def generate_choices(df, correct_row, direction):
     target_col = "Néerlandais" if direction == "fr_to_nl" else "Français"
@@ -233,7 +279,11 @@ def generate_choices(df, correct_row, direction):
     return choices, correct_answer
 
 def new_question(df, direction_pref):
-    row, was_due = pick_word_intelligent(df)
+    rarity_bias = st.session_state.get("rarity_bias", 1.5)
+    difficulty_bias = st.session_state.get("difficulty_bias", 1.0)
+    exclude_id = st.session_state.current_word["ID"] if "current_word" in st.session_state else None
+
+    row, was_due = pick_word(df, rarity_bias=rarity_bias, difficulty_bias=difficulty_bias, exclude_id=exclude_id)
     st.session_state.current_word = row
     st.session_state.was_due = was_due
     if direction_pref == "Aléatoire":
@@ -248,26 +298,22 @@ def new_question(df, direction_pref):
     st.session_state.qcm_correct = None
 
 def get_category_color(categorie):
-    cat = str(categorie)
-    # Cherche la première séquence de chiffres dans le nom de la catégorie
-    match = re.search(r'\d+', cat)
-    
-    if match:
-        num = int(match.group()) # Convertit le texte trouvé en nombre entier
-        
-        if num <= 1000:
-            return "#10B981"  # Vert (1 à 1000)
-        elif num <= 2000:
-            return "#3B82F6"  # Bleu (1001 à 2000)
-        elif num <= 3000:
-            return "#F97316"  # Orange (2001 à 3000)
-        elif num <= 4000:
-            return "#EF4444"  # Rouge (3001 à 4000)
-        else:
-            return "#8B5CF6"  # Violet (4001 et +)
-    else:
+    # Réutilise le même parsing de rang que le reste de l'algorithme intelligent
+    num = get_frequency_rank(categorie)
+
+    if num is None:
         # Si aucun chiffre n'est trouvé (ex: catégories manuelles "Finance", "Juridique")
         return "inherit"
+    if num <= 1000:
+        return "#10B981"  # Vert (1 à 1000)
+    elif num <= 2000:
+        return "#3B82F6"  # Bleu (1001 à 2000)
+    elif num <= 3000:
+        return "#F97316"  # Orange (2001 à 3000)
+    elif num <= 4000:
+        return "#EF4444"  # Rouge (3001 à 4000)
+    else:
+        return "#8B5CF6"  # Violet (4001 et +)
 
 # ============================================================
 # INTERFACE
@@ -417,13 +463,48 @@ elif menu == "🏋️ Exercices":
             with col_b:
                 direction = st.radio("Sens", ["FR → NL", "NL → FR", "Aléatoire"], horizontal=True, key="ex_direction")
 
+            # --- SÉLECTION INTELLIGENTE DES MOTS ---
+            with st.expander("⚙️ Sélection intelligente des mots", expanded=False):
+                col_r, col_d = st.columns(2)
+                with col_r:
+                    st.session_state.rarity_bias = st.slider(
+                        "🎯 Prioriser les mots rares", 0.0, 3.0,
+                        st.session_state.get("rarity_bias", 1.5), 0.1,
+                        help="0 = tous les mots ont autant de chances d'apparaître. Plus la "
+                             "valeur est élevée, plus les mots peu fréquents (frequentieklasse "
+                             "haute, ex. Top 4001-5000) reviennent souvent — pour élargir ton "
+                             "vocabulaire au-delà des mots les plus courants."
+                    )
+                with col_d:
+                    st.session_state.difficulty_bias = st.slider(
+                        "🔥 Prioriser les mots difficiles", 0.0, 3.0,
+                        st.session_state.get("difficulty_bias", 1.0), 0.1,
+                        help="Fait revenir plus souvent les mots sur lesquels tu échoues le "
+                             "plus (faible taux de réussite ou EaseFactor bas)."
+                    )
+                freq_options = ["Toutes les catégories"] + sorted(df["Catégorie"].dropna().unique().tolist())
+                freq_filter = st.selectbox(
+                    "📂 Se concentrer sur une seule catégorie / tranche (optionnel)", freq_options
+                )
+
+            def get_pool(base_df):
+                """Sous-ensemble de mots utilisé pour le tirage, selon le filtre choisi.
+                Ne sert jamais à sauvegarder : les mises à jour SM-2 s'appliquent
+                toujours sur la base complète (voir update_word / mark_as_known)."""
+                if freq_filter == "Toutes les catégories":
+                    return base_df
+                filtered = base_df[base_df["Catégorie"] == freq_filter]
+                return filtered if not filtered.empty else base_df
+
+            pool_df = get_pool(df)
+
             mode_key = "qcm" if "QCM" in mode else "texte"
-            if mode_key == "qcm" and len(df) < 4:
-                st.info("Il faut au moins 4 mots pour un QCM. Mode texte forcé.")
+            if mode_key == "qcm" and len(pool_df) < 4:
+                st.info("Il faut au moins 4 mots (dans cette catégorie) pour un QCM. Mode texte forcé.")
                 mode_key = "texte"
 
             if "current_word" not in st.session_state:
-                new_question(df, direction)
+                new_question(pool_df, direction)
 
             word = st.session_state.current_word
             d = st.session_state.current_direction
@@ -450,13 +531,13 @@ elif menu == "🏋️ Exercices":
                 speak_button(word[prompt_col], lang=prompt_lang, label="🔊 Écouter", key=f"speak_prompt_{word['ID']}")
             with top_row[1]:
                 if st.button("⏭️ Passer"):
-                    new_question(df, direction)
+                    new_question(get_pool(df), direction)
                     st.rerun()
             with top_row[2]:
                 if st.button("✅ Déjà connu", help="Repousse la révision de ce mot à dans 10 ans."):
                     updated_df = mark_as_known(df, word["ID"])
                     st.session_state.words_done_today += 1
-                    new_question(updated_df, direction)
+                    new_question(get_pool(updated_df), direction)
                     st.rerun()
 
             st.write("---")
@@ -503,29 +584,29 @@ elif menu == "🏋️ Exercices":
                         if c1.button("😓 Difficile"):
                             updated_df = update_word(df, word["ID"], 3)
                             st.session_state.words_done_today += 1
-                            new_question(updated_df, direction)
+                            new_question(get_pool(updated_df), direction)
                             st.rerun()
                         if c2.button("🙂 Bien"):
                             updated_df = update_word(df, word["ID"], 4)
                             st.session_state.words_done_today += 1
-                            new_question(updated_df, direction)
+                            new_question(get_pool(updated_df), direction)
                             st.rerun()
                         if c3.button("😎 Facile"):
                             updated_df = update_word(df, word["ID"], 5)
                             st.session_state.words_done_today += 1
-                            new_question(updated_df, direction)
+                            new_question(get_pool(updated_df), direction)
                             st.rerun()
                     else:
                         if st.button("Mot suivant ➔"):
                             updated_df = update_word(df, word["ID"], 4)
                             st.session_state.words_done_today += 1
-                            new_question(updated_df, direction)
+                            new_question(get_pool(updated_df), direction)
                             st.rerun()
                 else:
                     if st.button("Continuer ➔"):
                         updated_df = update_word(df, word["ID"], 1)
                         st.session_state.words_done_today += 1
-                        new_question(updated_df, direction)
+                        new_question(get_pool(updated_df), direction)
                         st.rerun()
 
 # --- PAGE 4 : STATISTIQUES ---
@@ -633,6 +714,62 @@ elif menu == "📊 Statistiques":
         fig_bar.update_traces(textfont_size=14, textangle=0, textposition="outside", cliponaxis=False)
         
         st.plotly_chart(fig_bar, use_container_width=True)
+
+        st.divider()
+
+        # --- LIGNE 3.5 : PROGRESSION PAR TRANCHE DE FRÉQUENCE ---
+        st.write("#### 📈 Progression par tranche de fréquence")
+        st.caption(
+            "Vérifie si tu progresses aussi sur le vocabulaire rare, et pas seulement "
+            "sur les mots les plus courants."
+        )
+
+        df_bands = df.copy()
+        df_bands["Rang"] = df_bands["Catégorie"].apply(get_frequency_rank)
+        df_bands["Tranche"] = df_bands["Rang"].apply(get_frequency_band_label)
+
+        band_order = [
+            "Top 1-1000 (très fréquent)", "Top 1001-2000", "Top 2001-3000",
+            "Top 3001-4000", "Top 4001-5000+ (rare)", "Sans fréquence (ajout manuel)",
+        ]
+        band_colors = {
+            "Top 1-1000 (très fréquent)": "#10B981",
+            "Top 1001-2000": "#3B82F6",
+            "Top 2001-3000": "#F97316",
+            "Top 3001-4000": "#EF4444",
+            "Top 4001-5000+ (rare)": "#8B5CF6",
+            "Sans fréquence (ajout manuel)": "#94A3B8",
+        }
+
+        band_stats = []
+        for band in band_order:
+            sub = df_bands[df_bands["Tranche"] == band]
+            if sub.empty:
+                continue
+            band_total = len(sub)
+            band_mastered = len(sub[sub["Repetitions"] >= 5])
+            band_stats.append({
+                "Tranche": band,
+                "Mots": band_total,
+                "Maîtrisés": band_mastered,
+                "% Maîtrisé": round(band_mastered / band_total * 100, 1) if band_total else 0,
+            })
+
+        if band_stats:
+            df_band_stats = pd.DataFrame(band_stats)
+            fig_bands = px.bar(
+                df_band_stats, x="Tranche", y="% Maîtrisé", text="% Maîtrisé",
+                color="Tranche", color_discrete_map=band_colors,
+            )
+            fig_bands.update_traces(texttemplate='%{text}%', textposition='outside')
+            fig_bands.update_layout(
+                showlegend=False, yaxis_range=[0, 100],
+                xaxis_title="", margin=dict(t=10, b=10, l=10, r=10),
+            )
+            st.plotly_chart(fig_bands, use_container_width=True)
+            st.dataframe(df_band_stats, use_container_width=True, hide_index=True)
+
+        st.divider()
 
         # --- LIGNE 4 : LES MOTS DIFFICILES (DANS UN MENU DÉROULANT POUR NE PAS POLLUER) ---
         difficult = df[(df["TotalReviews"] >= 2) & (df["EaseFactor"] < 2.0)]
